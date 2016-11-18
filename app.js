@@ -1,11 +1,13 @@
 /* globals console require setTimeout Promise */
-'use strict';
+"use strict";
 
 const httpRequester = require("./utils/http-requester");
 const htmlParser = require("./utils/html-parser");
 const queuesFactory = require("./data-structures/queue");
 const modelsFactory = require("./models");
 const constants = require("./config/constants");
+const repository = require("./utils/films-repository");
+const urlParser = require("./utils/url-parser");
 
 require("./config/mongoose")(constants.connectionString);
 
@@ -21,41 +23,56 @@ function wait(time) {
 
 constants.genres.forEach(genre => {
     for (let i = 0; i < constants.pagesCount; i += 1) {
-        let url = `http://www.imdb.com/search/title?genres=${genre}&title_type=feature&0sort=moviemeter,asc&page=${i+1}&view=simple&ref_=adv_nxt`;
+        let url = `http://www.imdb.com/search/title?genres=${genre}&title_type=feature&0sort=moviemeter,asc&page=${i + 1}&view=simple&ref_=adv_nxt`;
         urlsQueue.push(url);
     }
 });
 
-function getMoviesFromUrl(url) {
-    console.log(`Working with ${url}`);
-    httpRequester.get(url)
-        .then((result) => {
-            const selector = ".col-title span[title] a";
+// function getMoviesFromUrl(url) {
+//     console.log(`Working with ${url}`);
+//     httpRequester.get(url)
+//         .then((result) => {
+//             const selector = ".col-title span[title] a";
+//             const html = result.body;
+//             return htmlParser.parseSimpleMovie(selector, html);
+//         })
+//         .then(movies => {
+//             let dbMovies = movies.map(movie => {
+//                 return modelsFactory.getSimpleMovie(movie.title, movie.url);
+//             });
+
+//             modelsFactory.insertManySimpleMovies(dbMovies);
+
+//             return wait(1000);
+//         })
+//         .then(() => {
+//             if (urlsQueue.isEmpty()) {
+//                 return;
+//             }
+
+//             getMoviesFromUrl(urlsQueue.pop());
+//         })
+//         .catch((err) => {
+//             console.dir(err, { colors: true });
+//         });
+// }
+
+// const asyncPagesCount = 15;
+
+// Array.from({ length: asyncPagesCount })
+//     .forEach(() => getMoviesFromUrl(urlsQueue.pop()));
+
+function getMoviesDetails(url) {
+  return  httpRequester.get(url)
+ .then((result) => {
+            const selector = "#main_top";
             const html = result.body;
-            return htmlParser.parseSimpleMovie(selector, html);
+            return htmlParser.parseMovieDetails(selector, html);
         })
-        .then(movies => {
-            let dbMovies = movies.map(movie => {
-                return modelsFactory.getSimpleMovie(movie.title, movie.url);
-            });
-
-            modelsFactory.insertManySimpleMovies(dbMovies);
-
-            return wait(1000);
-        })
-        .then(() => {
-            if (urlsQueue.isEmpty()) {
-                return;
-            }
-
-            getMoviesFromUrl(urlsQueue.pop());
-        })
-        .catch((err) => {
-            console.dir(err, { colors: true });
-        });
 }
 
-const asyncPagesCount = 15;
+repository
+    .getMovies()
+    .then(x => urlParser(x))
+    .then(x=> x.forEach(y=> getMoviesDetails(y)));
 
-Array.from({ length: asyncPagesCount })
-    .forEach(() => getMoviesFromUrl(urlsQueue.pop()));
